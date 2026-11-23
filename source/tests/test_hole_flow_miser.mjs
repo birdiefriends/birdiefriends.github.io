@@ -22,7 +22,7 @@ ok(/MiserBall/.test(h) && /Anyone lose it/.test(h) && /Brian/.test(h) && /Dave/.
 ok(!/grid /.test(h), 'no strokes grid until someone is picked');
 A.holeFlowLostPick(5, 'Tom Marsh');
 h = A.holeFlowLostHtml(st, 3, g);
-ok(/Tom lost it on #5/.test(h) && /bbSetStroke/.test(h) && /disabled/.test(h), 'picking a player asks for strokes and the send button waits for them');
+ok(/Tom Marsh lost it on #5/.test(h) && /bbSetStroke/.test(h) && /disabled/.test(h), 'picking a player asks for strokes and the send button waits for them');
 A.set('s', 2);
 h = A.holeFlowLostHtml(st, 3, g);
 ok(!/disabled/.test(h) && /submitBirdieBall\(\)/.test(h), 'with strokes the send button is live and wired to the existing alert save');
@@ -30,7 +30,7 @@ A.holeFlowLostPick(5, 'Tom Marsh');
 ok(A.g()[0] === null, 'tapping the same player again cancels');
 A.set('a', [{ player_name: 'Tom Marsh', kept: false, lost_hole: 5, lost_stroke: 2 }]);
 h = A.holeFlowLostHtml(st, 3, g);
-ok(/Tom #5/.test(h) && !/holeFlowLostPick\(5,&quot;Tom/.test(h), 'a player who lost it shows as lost and cannot be picked again');
+ok(/Tom Marsh #5/.test(h) && !/holeFlowLostPick\(5,&quot;Tom/.test(h), 'a player who lost it shows as lost and cannot be picked again');
 // end-of-round check
 let k = A.holeFlowKeptHtml({ kind: 'keptcheck', hole: 18 }, 4, g);
 ok(/MiserBall check/.test(k) && /Lost on #5 \(2\)/.test(k), 'the check shows a recorded loss');

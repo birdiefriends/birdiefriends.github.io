@@ -23,14 +23,14 @@ ok(!/cttp-dist-input/.test(h3), 'no distance box until someone is picked');
 A.holeFlowClaimPick(3, 'Tom Marsh');
 ok(JSON.stringify(A.g()) === JSON.stringify([3, 'Tom Marsh']), 'tapping a name selects them for this hole');
 const h3b = A.holeFlowStepHtml(step(3), 2, g, true);
-ok(/cttp-dist-input/.test(h3b) && /Tom is closest/.test(h3b) && /submitCttp\(&quot;Turkey 2Man&quot;\)/.test(h3b), 'the picked name gets a distance box and a save button wired to submitCttp');
+ok(/cttp-dist-input/.test(h3b) && /Tom Marsh is closest/.test(h3b) && /submitCttp\(&quot;Turkey 2Man&quot;\)/.test(h3b), 'the picked name gets a distance box and a save button wired to submitCttp');
 A.holeFlowClaimPick(3, 'Tom Marsh');
 ok(A.g()[0] === null, 'tapping the same name again deselects');
 const h17 = A.holeFlowStepHtml(step(17), 2, g, true);
 ok(/prize/i.test(h17), '#17 is shown as the prize hole');
 A.s('d', { 3: { player: 'Mike Kay', dist: 6 } }); A.s('h', { 3: [{ player: 'Mike Kay', dist: 6 }] });
 const h3c = A.holeFlowStepHtml(step(3), 2, g, true);
-ok(/Now: Mike 6 ft/.test(h3c) && /disabled[^>]*>Mike/.test(h3c), 'the current leader shows, and a player who already claimed cannot claim twice');
+ok(/Now: Mike Kay 6 ft/.test(h3c) && /disabled[^>]*>Mike Kay/.test(h3c), 'the current leader shows, and a player who already claimed cannot claim twice');
 ok(A.holeFlowStepHtml({ kind: 'unknown' }, 2, g) === '', 'an unknown step kind renders nothing');
 
 // ── MiserBall steps

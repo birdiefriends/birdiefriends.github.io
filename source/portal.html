@@ -6988,13 +6988,13 @@ function leaderboardPrizesHtml(pb, me, opts) {
   const pts = pb.ranked_by === 'points', byPar = pb.ranked_by === 'to_par';
   const fmt = r => pts ? String(r.total) : byPar ? (r.to_par === 0 ? 'E' : r.to_par > 0 ? '+' + r.to_par : String(r.to_par)) : String(r.total);
   const first = n => String(n).trim().split(/\s+/)[0], ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
-  const label = r => r.label.includes(' & ') || r.members.length > 1 ? r.members.map(first).join(' & ') : r.label;
+  const label = r => r.label.includes(' & ') || r.members.length > 1 ? r.members.map(first).join(' & ') : (r.members.length === 1 ? r.members[0] : r.label);
   const mineRow = r => (r.members || []).some(n => lc(n) === lc(me));
   const cur = pb.scopes.find(x => x.id === _lbUi.scope) || pb.scopes[0];
   const chips = pb.scopes.map(sc => { const on = sc.id === cur.id, L = sc.leader;
     return `<button type="button" onclick="lbPick('${esc(sc.id)}')" style="flex:1;min-width:104px;text-align:left;padding:8px 10px;border-radius:12px;border:1.5px solid ${on ? 'var(--green)' : 'var(--border)'};background:${on ? 'var(--green-light)' : '#fff'};font-family:inherit;cursor:pointer">
       <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted)">${sc.id === 'overall' ? '🏆' : '🚩'} ${esc(sc.name)}</div>
-      <div style="font-size:0.9rem;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${L ? esc(label(L)) : '–'}</div>
+      <div style="font-size:0.88rem;font-weight:700;margin-top:2px;line-height:1.2;overflow-wrap:anywhere">${L ? esc(label(L)) : '–'}</div>
       <div style="font-size:0.74rem;color:var(--text-muted)">${L ? `${fmt(L)} · ${L.complete ? 'F' : 'thru ' + L.thru}` : 'no scores'}</div></button>`; }).join('');
   const spots = pb.scopes.map(sc => { const r = sc.rows.find(mineRow); return r && r.place != null ? `${r.tied ? 'T' : ''}${ord(r.place)} ${esc(sc.name)}` : ''; }).filter(Boolean);
   const sortBtn = (k, t) => `<button type="button" onclick="lbSort('${k}')" style="flex:1;height:32px;border-radius:8px;border:1.5px solid ${_lbUi.sort === k ? 'var(--green)' : 'var(--border)'};background:${_lbUi.sort === k ? 'var(--green)' : '#fff'};color:${_lbUi.sort === k ? '#fff' : 'var(--text-muted)'};font-family:inherit;font-size:0.76rem;font-weight:700;cursor:pointer">${t}</button>`;
@@ -11845,11 +11845,11 @@ function liveScoreModeHtml() {
   if (skAskStart(g)) return skStartPickerHtml(g);
   if (!g.players.length) return `<div style="font-size:0.85rem;color:rgba(255,255,255,0.7);padding:8px 0">Nobody is set up for this game yet.</div>`;
   const pars = skPars(), par = pars ? pars[hole - 1] : null;
-  const first = n => String(n).trim().split(/\s+/)[0];
+  const first = n => String(n).trim().replace(/\s+/g, ' '), firstOnly = n => String(n).trim().split(/\s+/)[0];   // a solo shows the full name; a pair stays "Tom & Jo"
   // Alternate Shot: one ball per pair, so the rows are the TEAMS (entering for the team fills in both partners).
   const asMode = liveOneBall(_sk.config);
   const tnames = asMode ? liveSideTeamNames(_sk.config) : null;
-  const units = asMode ? g.pairs.filter(pr => pr.length >= 1).map(pr => ({ k: g.players.indexOf(pr[0]), n: pr[0], label: (tnames.get(String(pr[0]).trim().toLowerCase()) || pr.map(first).join(' & ')), who: pr.map(first).join(' & ') }))
+  const units = asMode ? g.pairs.filter(pr => pr.length >= 1).map(pr => ({ k: g.players.indexOf(pr[0]), n: pr[0], label: (tnames.get(String(pr[0]).trim().toLowerCase()) || pr.map(firstOnly).join(' & ')), who: pr.map(firstOnly).join(' & ') }))
     : g.players.map((n, k) => ({ k, n, label: n }));
   const vals = units.map(u => { const v = skCardOf(u.n)[hole - 1]; return v > 0 ? v : null; });
   const done = vals.every(v => v != null);
@@ -11863,7 +11863,7 @@ function liveScoreModeHtml() {
     const v = vals[ui], active = k === _sk.sel, d = v == null || par == null ? 0 : v - par;
     const col = v == null ? 'rgba(255,255,255,0.35)' : d < 0 ? '#5DCAA5' : d > 0 ? '#e0b44c' : '#fff';
     const pr = g.pairs.find(p => p.length === 2 && p[0] === n);
-    const label = pr && !asMode ? `<div style="font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:10px 2px 4px;font-family:'DM Mono',monospace">${pr.map(x => escapeHtml(first(x))).join(' &amp; ')}</div>` : '';
+    const label = pr && !asMode ? `<div style="font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:10px 2px 4px;font-family:'DM Mono',monospace">${pr.map(x => escapeHtml(firstOnly(x))).join(' &amp; ')}</div>` : '';
     return `${label}<button type="button" onclick="skPick(${k})" style="display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:12px;min-height:56px;box-sizing:border-box;cursor:pointer;margin-bottom:6px;color:#fff;font-family:inherit;text-align:left;${active ? 'border:2px solid #5DCAA5;background:rgba(93,202,165,0.18)' : 'border:1.5px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.2)'}">
       <span style="flex:1;min-width:0;font-size:1rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(label0)}${asMode && u.who && u.who !== label0 ? ` <span style="font-size:0.7rem;font-weight:400;color:rgba(255,255,255,0.55)">${escapeHtml(u.who)}</span>` : ''} ${skDotsHtml(skGot(n, hole), '#ffe08a')}${skGot(n, hole) ? `<span style="font-size:0.68rem;font-weight:500;color:#ffe08a;margin-left:4px">gets ${skGot(n, hole) > 1 ? skGot(n, hole) + ' strokes' : 'a stroke'}</span>` : ''}</span>
       <span style="min-width:44px;text-align:right;font-family:'DM Mono',monospace;font-size:1.5rem;font-weight:700;color:${col}">${v == null ? '–' : v}${v != null && skGot(n, hole) ? `<span style="display:block;font-size:0.66rem;font-weight:500;color:#ffe08a;line-height:1">net ${v - skGot(n, hole)}</span>` : ''}</span></button>${active ? pad : ''}`;
@@ -11921,7 +11921,7 @@ function holeFlowClaimHtml(st, n, g) {
   const hole = st.hole, nm = x => String(x || '').trim().toLowerCase();
   const leader = _ctpData[hole];
   const sel = (_ctpHole === hole && _ctpPlayer) ? _ctpPlayer : null;
-  const first = x => String(x).trim().split(/\s+/)[0];
+  const first = x => String(x).trim().replace(/\s+/g, ' ');
   const sub = st.prize ? (st.prize_text ? 'Prize hole. Closest wins: ' + escapeHtml(st.prize_text) : 'Prize hole. Closest wins the pin prize') : (leader ? 'Now: ' + escapeHtml(first(leader.player)) + (leader.dist ? ' ' + leader.dist + ' ft' : '') : 'Nobody yet');
   const pills = g.players.map(p => {
     const already = (_ctpHistory[hole] || []).some(e => nm(e.player) === nm(p));
@@ -11936,7 +11936,7 @@ function holeFlowClaimHtml(st, n, g) {
 }
 // MiserBall step: "did anyone lose it on this hole?" Tap the player, pick the strokes, send. Uses the same save and group push
 // as the old alert widget (submitBirdieBall), so the answer lands in bfe_birdieball_answers either way.
-function holeFlowBbShort(p) { return String(p).trim().split(/\s+/)[0]; }
+function holeFlowBbShort(p) { return String(p).trim().replace(/\s+/g, ' '); }
 function holeFlowLostHtml(st, n, g) {
   const hole = st.hole, nm = x => String(x || '').trim().toLowerCase();
   const rows = g.players.map(p => ({ p, a: bbAnswerFor(p) }));
