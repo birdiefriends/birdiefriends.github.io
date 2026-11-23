@@ -44,4 +44,6 @@ R("_gamesFormSelected.delete('podium')"); ok(R('gatheringGamesPodiumSectionHtml(
   R("_gamesFormSelected.add('podium')"); ok(/pzFlightTeeOther\(0\)/.test(R('gatheringGamesPodiumSectionHtml()')), 'each flight has an Other… tee button'); }
 R("pzTiebreak('Putt-off on the green')"); ok(R('_gamesFormPrizes.tiebreak') === 'Putt-off on the green', 'the Tiebreak rule is kept on the Prizes config');
 ok(/tiebreak: \[String\(c\.tiebreak\)/.test(src) && /tie_order: c\.tie_order/.test(src), 'it is saved with the Prizes config, and a recorded result survives an edit of Games');
+ok(!/No money, the loser buys/.test(src) && /No money, bragging rights/.test(src) && /Ranks the Prizes below, which pay the places/.test(src), 'the player games card: no "loser buys" (that is the BF Cup), and a Scramble feeding Prizes says so');
+ok(!/prizes \| \| \[\]\)\.length\} prizes · \$\$\{\(pzA\.dollar_per_player/.test(src) && /prizes · \$\{usd\(cost\)\} prize pot/.test(src), 'the Prizes line shows the prize pot, not $/player');
 console.log(`${pass} passed, ${fail} failed`); if (fail) process.exit(1);

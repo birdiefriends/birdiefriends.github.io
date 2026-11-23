@@ -19399,7 +19399,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     const sg = f.segments;
     const nm = pr => pr.map(esc).join(' &amp; ');
     const isScr = gid === 'scramble', heroOk = !isScr && ((f.pairs || []).length === 2 || !!(sg && sg.scope === 'group'));
-    if (!(f.pot > 0)) h += `<div style="font-size:0.76rem;color:var(--text-muted);margin:2px 0 8px">No money on this one: bragging rights (the loser buys).</div>`;
+    if (!(f.pot > 0)) h += `<div style="font-size:0.76rem;color:var(--text-muted);margin:2px 0 8px">No money on this one: bragging rights.</div>`;
     if (heroOk) {
       h += sideResultHeroHtml(f, gid) + fourballResultsHeatHtml(f, null);
     } else if (isScr) {
@@ -20134,8 +20134,8 @@ function gatheringGameDetailsBody(evt, config) {
       if (potS > 0) {
         const sp = BFEngine.scrambleSplits(a), sum = sp.reduce((t, v) => t + v, 0) || 1, ord = ['1st', '2nd', '3rd'];
         pay = sp.length > 1 ? sp.map((v, k) => `${ord[k]} ${usd(Math.floor(potS * v / sum))}`).join(' · ') + ` · ${usd(potS)} pot` : `Winning team takes the ${usd(potS)} pot`;
-      } else pay = 'No money, the loser buys';
-    } else pay = dpp > 0 ? usd(dpp) + ' a player · ' + usd(cost) + ' pot' : 'No money, the loser buys';
+      } else { const pzS = gatheringAddon(config, 'podium'); pay = pzS && pzS.rank_by === 'scramble' ? 'Ranks the Prizes below, which pay the places' : 'No money, bragging rights'; }
+    } else pay = dpp > 0 ? usd(dpp) + ' a player · ' + usd(cost) + ' pot' : 'No money, bragging rights';
     const scPrize = gid === 'scramble' && cleanPrize(a.prize) ? prizeLine(`Winners also get: ${escapeHtml(cleanPrize(a.prize))}`) : '';
     rows.push(row(icon, `${title} · ${aNet ? (a.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `${rule}${payLine(`${pay}${kPk !== 'round' && !isM ? `, ${BFEngine.PERIODS[kPk].phrase} are separate pots` : ''}${isM ? ', winner announced the moment it is decided (you can play on)' : ''}`)}${scPrize}`, gid));
   });
@@ -20150,7 +20150,7 @@ function gatheringGameDetailsBody(evt, config) {
   if (pzA) {
     const cost = (pzA.dollar_per_player || 0) * yesCount, t = pzA.table || { flights: [], prizes: [] };
     remaining -= cost;
-    rows.push(row('🏆', `Prizes · ${pzA.basis === 'net' ? 'Net' : 'Gross'}`, `${(t.flights || []).length ? 'Overall plus ' + (t.flights || []).map(f => escapeHtml(f.name)).join(' and ') + ' (by tee box)' : 'Overall'} · ${(t.prizes || []).length} prizes · $${(pzA.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} prize pot`, 'podium'));
+    rows.push(row('🏆', `Prizes · ${pzA.basis === 'net' ? 'Net' : 'Gross'}`, `${(t.flights || []).length ? 'Overall plus ' + (t.flights || []).map(f => escapeHtml(f.name)).join(' and ') + ' (by tee box)' : 'Overall'} · ${(t.prizes || []).length} prizes · ${usd(cost)} prize pot`, 'podium'));
   }
   const tkA = gatheringAddon(config, 'turkeys');
   if (tkA) {
@@ -23539,7 +23539,7 @@ function gatheringGamesSideSectionHtml(gid) {
       </div>
       <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 10px">${segN > 1
         ? `Each player puts in $${(c.dollar_per_player || 0).toFixed(2)} in all ($${(Math.round((c.dollar_per_player || 0) / segN * 100) / 100).toFixed(2)} for each of the ${segN} periods).`
-        : 'Leave it at $0 to play for bragging rights (or the loser buys at the pub). The result is still worked out.'}</div></div>
+        : 'Leave it at $0 to play for bragging rights. The result is still worked out.'}</div></div>
       ${sc ? `<div style="margin-bottom:8px"><div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:3px">Scored on</div>${gamesBasisSelectHtml(c.basis, `(v=>setGamesFormSide('${gid}','basis',v))`)}</div>` : gamesScoredPeriodRowHtml(c.basis, `(v=>setGamesFormSide('${gid}','basis',v))`, pk, `(v=>setGamesFormSide('${gid}','period',v))`)}
       <div style="margin:10px 0 12px;background:var(--green-light);border-radius:10px;padding:10px 12px;font-size:0.8rem;line-height:1.45">${periodExplainHtml(pk, c.dollar_per_player, { round: mp
         ? 'Each match is its own pot: the winner takes it, and a match that ends level is halved, so both players get their money back.'

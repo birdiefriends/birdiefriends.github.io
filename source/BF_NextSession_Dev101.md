@@ -130,3 +130,6 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 
 ## v4.108.1 (engine 1.66.1)
 - Tiebreak applies to OVERALL only by default; flight ties split quietly. New Prizes field `tiebreak_flights` (checkbox "Break ties in the flights too", only shown when flights exist). Worker schema regenerated: the Worker only needs redeploying to ever store `tiebreak_flights: true`; without it the default (Overall only) is exactly Brian's Black Friday intent.
+
+## v4.108.2
+- Player games card: zero-money games say "No money, bragging rights" (the "loser buys" line is BF Cup wording); a Scramble that feeds Prizes says it ranks the Prizes; the Prizes line shows the prize pot, not $/player.
