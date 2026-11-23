@@ -13,4 +13,5 @@ ok(src.includes("const set = pub || (typeof LIVE_EVENT_TEST_MODE !== 'undefined'
 ok(/if \(!LIVE_EVENT_TEST_MODE \|\| gid == null/.test(src) && /host_id=\$\{encodeURIComponent\(currentPlayer\)\}`, \{\}, 8000\);\n    if \(r && !r\.published && r\.draft/.test(src), 'the draft is fetched only in test mode, with the host id, and kept out of _groupSets');
 const iso = src.slice(src.indexOf('function skIsOut'), src.indexOf('function skIsOut') + 300);
 ok(!/_groupDraftPreview/.test(iso), 'start holes / out marks never read the draft');
+ok(/Date\.now\(\) - Number\(o\.t\) < 12 \* 3600e3/.test(src) && /JSON\.stringify\(\{ t: Date\.now\(\), k: \[\.\.\.skCoinAcked\(g\)\] \}\)/.test(src), 'a coin "Got it" is remembered for 12 hours only, so a look in test mode days early does not silence game day');
 console.log(`solo_groups: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

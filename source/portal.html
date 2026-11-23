@@ -11618,10 +11618,14 @@ function skCoinPending(hole, nextH, g, gs, acked) {
   return skCoinNotes(hole, nextH, g, gs).filter(n => !(n.kind === 'pickup' && n.ahead) && !acked.has(n.key));
 }
 function skCoinAckKey(g) { return 'bf_coin_ack_' + (_sk ? _sk.gid : '') + '_' + (g ? g.n : ''); }
-function skCoinAcked(g) { let a = []; try { a = JSON.parse(localStorage.getItem(skCoinAckKey(g)) || '[]'); } catch (e) {} return new Set(a.concat(_sk && _sk.coinAck ? [..._sk.coinAck] : [])); }
+// A "Got it" is remembered on this phone for the round in progress only (12 hours): a look in test mode a few days early must not silence the real thing.
+function skCoinAcked(g) {
+  let a = []; try { const o = JSON.parse(localStorage.getItem(skCoinAckKey(g)) || 'null'); if (o && Array.isArray(o.k) && Date.now() - Number(o.t) < 12 * 3600e3) a = o.k; } catch (e) {}
+  return new Set(a.concat(_sk && _sk.coinAck ? [..._sk.coinAck] : []));
+}
 function skCoinAck(keys) {
   const g = skGroup(); if (!_sk) return; _sk.coinAck = _sk.coinAck || new Set(); keys.forEach(k => _sk.coinAck.add(k));
-  try { localStorage.setItem(skCoinAckKey(g), JSON.stringify([...skCoinAcked(g)])); } catch (e) {}
+  try { localStorage.setItem(skCoinAckKey(g), JSON.stringify({ t: Date.now(), k: [...skCoinAcked(g)] })); } catch (e) {}
   const el = document.getElementById('sk-coin-popup'); if (el) el.remove();
 }
 function skCoinPopupCheck() {
