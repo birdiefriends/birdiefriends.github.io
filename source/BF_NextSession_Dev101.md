@@ -137,3 +137,8 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 ## v4.108.3
 - Live panel said "Nobody is set up for this game yet" on the 1Man: skGroups reads the Scramble teams from the saved `pairs` snapshot. A team-of-1 Scramble now takes its teams from the current Yes registrations (gatheringRowWithLiveTeams): saved order kept, dropouts removed, new Yes players added, open spots ignored; as-played still wins. Live panel, leaderboard, Close all use it.
 - Unverified on real data: if the panel still says nobody is set up, the event has no Yes registrations loaded.
+
+## v4.109.0 — Registrations are the only source of Scramble teams
+- Games wizard: the Scramble has no Teams screen. `gamesFormScrambleFillFromRegs()` keeps the form list (and the saved snapshot) equal to registration: team of 1 = Yes players; teams of 2-4 = partner picks on a Gathering set for that size; otherwise the step says so. A short note on the Scramble screen explains it. Saved `teams_by` is always "players"; `hostSetTeamsFor` returns null (old host-built lists are ignored). Day-of fixes stay in Live Edit (Fix teams & groups).
+- Other pair games (BestBall, Alt Shot, Hi-Lo, Match Play) keep their pairs screens.
+- Runtime unchanged from v4.108.3 (gatheringRowWithLiveTeams reads registrations for team of 1; Live Edit as-played wins).

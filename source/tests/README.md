@@ -25,7 +25,7 @@ Chromium binary if it isn't at `/opt/pw-browsers/chromium`, or it's reported as 
 | `test_noshow_guards.mjs` | Dev-101: players marked out cannot be scored; a no-show registration is set to No with retries and a pending list |
 | `test_host_card_primary.mjs` | Dev-101: host card has one dark primary button by state (live: Fix teams) and a More fold while live |
 | `test_live_edit_card_button.mjs` | Dev-101: the host Fix teams icon on the event card (host/commissioner, not past/closed/canceled) |
-| `test_host_set_teams.mjs` | Dev-101: host-set teams (Games, teams_by host) win over players picks on the card, panel, Close, partner prompts |
+| `test_host_set_teams.mjs` | v4.109.0: registrations are the only source of Scramble teams; an old host-built list (teams_by host) is ignored on the card, panel, Close |
 | `test_effective_start.mjs` | Dev-101: Turkeys + MiserBall survivor use the start hole the scores show, plan only as fallback |
 | `test_podium.mjs` | Individual Low Score prizes: overall + flights (by tee or name), several places, ties share, scale-to-pot, validation |
 | `test_prize_board.mjs` | Prizes live board: Overall + each flight from partial cards, prize each place pays today, chips / You line / sort on the leaderboard sheet |

@@ -20,7 +20,7 @@ ok(ctx.gamesFormSideFrom('scramble', { hcp_method: 'bogus', payout: 'x', scoring
 const cfg = { dollar_per_player: 10, basis: 'net', net_mode: 'own', scoring: 'stableford', scale: 'bf', hcp_method: 'ranked', team_size: 2, pct_1: 35, pct_2: 15, allowance: 25, payout: 'top2', pars: Array(18).fill(4), pairs: [['Ann', 'Bob'], ['Cy', 'Di']] };
 ok(BFEngine.validateGameConfig('scramble', cfg).ok, 'the config the form builds passes engine validation');
 // wiring pins
-ok(/GW_SIDE_STEP = \{[^}]*scramble: 'scpairs'/.test(src) && /scpairs: 'Scramble teams'/.test(src), 'wizard has a Scramble teams step');
+ok(/GW_SIDE_STEP = \{[^}]*scramble: 'scramble'/.test(src) && /GW_SIDE_STEP\[k\] !== k/.test(src), 'the wizard has no Scramble teams step: teams come from registration');
 ok(/Stableford needs par data for this venue/.test(src) && /cfg\.pars = _gamesFormBirdiepayPars\.slice\(\)/.test(src), 'Stableford refuses to save without par data and freezes the pars');
 ok(/delete cfg\.period/.test(src), 'a scramble is whole round: no period saved');
 ok(/teamSizeOf\(g\) && !g\.eventShadow/.test(src) && /teamsState\(gatheringRegData\.filter/.test(src), 'Teams of 2 Gatherings pre-fill Scramble teams from locked pairs');
