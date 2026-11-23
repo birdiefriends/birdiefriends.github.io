@@ -114,3 +114,6 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 - Leaderboard sheet: when the event has Prizes, shows leader chips (one per scope, tap to switch), a "You: 1st Green · T3 Overall" line, By score / By holes played sort, prize pills on paid rows and a PAID PLACES divider. Card row now also shows for a Prizes-only event. Events without Prizes keep the old board.
 - Worker file regenerated only for the schema-header version string (no behaviour change); redeploy optional.
 - Net basis on a round-ranked Prizes shows gross live (note says so); net applies at Close.
+
+## v4.107.1
+- MiserBall money card shows its total and % of pot in the right margin like the others; "Play it by team" is hidden when the Scramble is team size 1 (a team of one is the individual game).
