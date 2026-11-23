@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.63.0';
+  const ENGINE_VERSION = '1.64.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1070,57 +1070,80 @@
   // (A shared pool or a split can be offered later as a tie rule; nothing else here needs to change.)
   //   addon: { dollar_per_player, basis:'gross'|'net', period }
   // Like BestBall it can never take more than the pot has left (reported as `capped`).
-  // ── Prizes: flights + places (v1.62.0) ────────────────────────────────────────────────────────────────────────────────
-  // podium = { flights: [{ id, name, tees?, players? }], prizes: [{ scope: 'overall' | flightId, place, amount? | pct? }] }. A flight is a group of
-  // players ranked among themselves; "overall" ranks everyone. A player can win overall AND in their flight. How a player lands in a flight is
-  // one small function (flightOfPlayer): by the tee box they were given, or by name. Other ways (handicap, age) are new cases there, nothing else.
-  function lowscorePodiumOf(addon) {
-    const p = addon && addon.podium; if (!p || !Array.isArray(p.prizes) || !p.prizes.length) return null;
-    return { flights: Array.isArray(p.flights) ? p.flights : [], prizes: p.prizes };
-  }
+  // ── Prizes (v1.63.0): a pot-level podium, whatever the game ──────────────────────────────────────────────────────────
+  // The host funds it with its own $ per player and prices tiers of places: Overall and/or flights, up to 5 places each, a dollar amount or a % of the
+  // prize pot. WHAT is ranked is chosen by `rank_by`: 'round' = each player's own round total (gross, or net), or a game on the event (a Scramble's
+  // teams, BestBall pairs ...) read from that game's standings. 'auto' = the first ranked game on the event, else the round totals. A flight is a group of
+  // players ranked among themselves; Overall ranks everyone; one player can win Overall AND in their flight. Ties share the places they cover.
+  // How a player lands in a flight is one small function (flightOfPlayer): by the tee box they were given, or by name. Other ways (handicap, age) are new
+  // cases there, nothing else. table = { flights: [{ id, name, tees?, players? }], prizes: [{ scope: 'overall' | flightId, place, amount? | pct? }] }
+  const PRIZE_SOURCES = ['scramble', 'fourball', 'altshot', 'hilo', 'lowscore'];
   function flightOfPlayer(flights, name, teeByPlayer) {
     const nm = norm(name), tee = teeByPlayer ? String(teeByPlayer.get ? teeByPlayer.get(nm) || '' : teeByPlayer[nm] || '').trim().toLowerCase() : '';
     const f = (flights || []).find(x => (x.players || []).some(pn => norm(pn) === nm) || (tee && (x.tees || []).some(t => String(t).trim().toLowerCase() === tee)));
     return f ? f.id : null;
   }
-  function lowscorePodium(state, addon, podium, rows, pot, head, tail, inputs) {
-    const L = state.ledger;
-    const owed = pr => (pr.amount > 0 ? Number(pr.amount) : (Number(pr.pct) / 100) * pot);
-    const total = podium.prizes.reduce((a, pr) => a + owed(pr), 0);
-    const ratio = total > pot && total > 0 ? pot / total : 1;   // the table asks for more than the pot holds: every prize shrinks the same way, and the result says so
-    const scopes = [{ id: 'overall', name: 'Overall', members: rows }].concat(podium.flights.map(f => ({ id: f.id, name: f.name,
-      members: rows.filter(r => flightOfPlayer([f], r.player, inputs && inputs.teeByPlayer) === f.id) })));
-    const paid = new Map(), prizesOut = [], scopesOut = [];
-    let spent = 0, unplaced = 0;
-    scopes.forEach(sc => {
-      const mine = podium.prizes.filter(pr => pr.scope === sc.id).sort((a, b) => a.place - b.place); if (!mine.length) return;
-      const ranked = sc.members.filter(r => r.complete).sort((a, b) => a.total - b.total);
-      const groups = []; ranked.forEach(r => { const g = groups[groups.length - 1]; if (g && g.total === r.total) g.rows.push(r); else groups.push({ total: r.total, rows: [r], start: ranked.indexOf(r) }); });
-      const prizeAt = place => mine.find(pr => pr.place === place);
-      const winnersOut = [];
-      groups.forEach(g => {
-        const covered = []; for (let k = 1; k <= g.rows.length; k++) covered.push(g.start + k);
-        const pool = covered.reduce((a, pl) => a + (prizeAt(pl) ? owed(prizeAt(pl)) * ratio : 0), 0);
-        const each = Math.floor(pool / g.rows.length);                  // whole dollars; the odd dollars are reported, not moved
-        g.rows.forEach(r => { r.place_in = g.start + 1; r.tied_in = g.rows.length > 1;
-          if (each > 0) { L.credit(r.player, 'lowscore', each); paid.set(norm(r.player), (paid.get(norm(r.player)) || 0) + each); winnersOut.push({ player: r.player, place: g.start + 1, tied: g.rows.length > 1, amount: each, scope: sc.id }); } });
-        g.each = each; spent += each * g.rows.length; unplaced += pool - each * g.rows.length;
-      });
-      mine.forEach(pr => { const amt = owed(pr) * ratio, g = groups.find(x => pr.place > x.start && pr.place <= x.start + x.rows.length);
-        prizesOut.push({ scope: sc.id, scope_name: sc.name, place: pr.place, amount: Math.round(amt * 100) / 100, ...(pr.pct > 0 && !(pr.amount > 0) ? { pct: pr.pct } : {}), filled: !!g,
-          winners: g ? g.rows.map(r => ({ player: r.player, amount: g.each, ...(g.rows.length > 1 ? { tied: true } : {}) })) : [] }); });
-      scopesOut.push({ id: sc.id, name: sc.name, field: sc.members.length, finished: ranked.length, winners: winnersOut,
-        standings: ranked.map(r => ({ player: r.player, total: r.total, place: r.place_in, tied: !!r.tied_in })) });
-    });
-    // whatever was not paid (a place nobody finished, odd dollars, a pot bigger than the table) goes back to everyone, never lost
-    const left = Math.max(0, pot - spent), gb = L.giveBack(left);
-    state.unallocated += gb.unallocated;
-    const winners = [...new Set(scopesOut.flatMap(x => x.winners.map(w => w.player)))];
-    const unflighted = podium.flights.length ? rows.filter(r => r.complete && !flightOfPlayer(podium.flights, r.player, inputs && inputs.teeByPlayer)).map(r => r.player) : [];
-    return Object.assign({ ...head, podium: true, flights: podium.flights.map(f => ({ id: f.id, name: f.name })), prizes: prizesOut, scopes: scopesOut,
-      standings: rows.map(r => ({ player: r.player, complete: r.complete, played: r.played, total: r.total, holes: r.holes })).sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
-      winners, per_player: 0, given_back_each: gb.each, paid: Math.round(spent * 100) / 100, ...(ratio < 1 ? { scaled: true, asked: Math.round(total * 100) / 100 } : {}), ...(unflighted.length ? { unflighted } : {}) }, tail);
+  // A team is in a flight only when every member is in the same one.
+  function flightOfRow(flights, row, teeByPlayer) {
+    const ids = row.members.map(m => flightOfPlayer(flights, m, teeByPlayer));
+    return ids.length && ids.every(x => x && x === ids[0]) ? ids[0] : null;
   }
+  // The rows to rank: [{ label, members, total, complete }] and which way is better.
+  function prizeRows(state, addon, inputs) {
+    const want = addon.rank_by && addon.rank_by !== 'auto' ? addon.rank_by : null, res = state.results || {};
+    const src = want && want !== 'round' ? want : (!want ? PRIZE_SOURCES.find(id => res[id] && Array.isArray(res[id].standings) && res[id].standings.length) : null);
+    if (src && res[src] && Array.isArray(res[src].standings)) {
+      const r = res[src], higher = r.scoring === 'stableford';
+      const rows = r.standings.map(x => { const members = x.pair ? x.pair.slice() : [x.player]; return { label: members.join(' & '), members, total: x.total, complete: !!x.complete && x.total != null }; });
+      return { source: src, higher, rows, basis: r.basis || 'gross' };
+    }
+    const L = state.ledger, cardBy = new Map((inputs.scorecards || []).map(c => [norm(c.player), c]));
+    const netOk = addon.basis === 'net' && !!inputs.netByPlayer, nine = [...cardBy.values()].some(c => c.hole_count === 9), expected = nine ? 9 : 18;
+    const rows = L.players.filter(nm => cardBy.has(norm(nm))).map(nm => {
+      const c = cardBy.get(norm(nm)), arr = (netOk ? (inputs.netByPlayer.get(norm(nm)) || { holes: c.holes }).holes : c.holes || []).slice(0, expected).map(v => (typeof v === 'number' && v > 0 ? v : null));
+      const complete = arr.length === expected && arr.every(v => v != null);
+      return { label: L.canon(nm), members: [L.canon(nm)], total: complete ? arr.reduce((a, v) => a + v, 0) : null, complete };
+    });
+    return { source: 'round', higher: false, rows, basis: netOk ? 'net' : 'gross' };
+  }
+  ADDONS.podium = {
+    id: 'podium', order: 27, entity: 'individual',
+    carve(state, addon, inputs) {
+      const L = state.ledger, table = addon.table && Array.isArray(addon.table.prizes) ? addon.table : { flights: [], prizes: [] }, flights = table.flights || [];
+      const dpp = Number(addon.dollar_per_player) || 0, configuredPot = dpp * L.n, pot = Math.min(configuredPot, Math.max(0, state.remaining)), capped = pot < configuredPot;
+      state.remaining -= pot;
+      const pr = prizeRows(state, addon, inputs), tee = inputs.teeByPlayer;
+      const owed = z => (z.amount > 0 ? Number(z.amount) : (Number(z.pct) / 100) * pot);
+      const asked = table.prizes.reduce((a, z) => a + owed(z), 0), ratio = asked > pot && asked > 0 ? pot / asked : 1;   // a table bigger than the pot: every prize shrinks the same way, and the result says so
+      const scopes = [{ id: 'overall', name: 'Overall', members: pr.rows }].concat(flights.map(f => ({ id: f.id, name: f.name, members: pr.rows.filter(r => flightOfRow([f], r, tee) === f.id) })));
+      const prizesOut = [], scopesOut = []; let spent = 0;
+      const pay = (row, amt) => { if (row.members.length > 1) L.creditTeam(row.label, row.members, 'podium', amt); else L.credit(row.members[0], 'podium', amt); };
+      scopes.forEach(sc => {
+        const mine = table.prizes.filter(z => z.scope === sc.id).sort((a, b) => a.place - b.place); if (!mine.length) return;
+        const ranked = sc.members.filter(r => r.complete).sort((a, b) => pr.higher ? b.total - a.total : a.total - b.total);
+        const groups = []; ranked.forEach((r, i) => { const g = groups[groups.length - 1]; if (g && g.total === r.total) g.rows.push(r); else groups.push({ total: r.total, rows: [r], start: i }); });
+        const prizeAt = place => mine.find(z => z.place === place), winnersOut = [];
+        groups.forEach(g => {
+          let poolAmt = 0; for (let k = 1; k <= g.rows.length; k++) if (prizeAt(g.start + k)) poolAmt += owed(prizeAt(g.start + k)) * ratio;
+          const each = Math.floor(poolAmt / g.rows.length);               // whole dollars; the odd dollars are reported, not moved
+          g.each = each; g.rows.forEach(r => { r.place_in = g.start + 1; r.tied_in = g.rows.length > 1; if (each > 0) { pay(r, each); spent += each; winnersOut.push({ player: r.label, place: g.start + 1, tied: g.rows.length > 1, amount: each, scope: sc.id }); } });
+        });
+        mine.forEach(z => { const g = groups.find(x => z.place > x.start && z.place <= x.start + x.rows.length);
+          prizesOut.push({ scope: sc.id, scope_name: sc.name, place: z.place, amount: Math.round(owed(z) * ratio * 100) / 100, ...(z.pct > 0 && !(z.amount > 0) ? { pct: z.pct } : {}), filled: !!g,
+            winners: g ? g.rows.map(r => ({ player: r.label, amount: g.each, ...(g.rows.length > 1 ? { tied: true } : {}) })) : [] }); });
+        scopesOut.push({ id: sc.id, name: sc.name, field: sc.members.length, finished: ranked.length, winners: winnersOut,
+          standings: ranked.map(r => ({ player: r.label, total: r.total, place: r.place_in, tied: !!r.tied_in })) });
+      });
+      // whatever was not paid (a place nobody finished, odd dollars, a pot bigger than the table) goes back to everyone, never lost
+      const gb = L.giveBack(Math.max(0, pot - spent)); state.unallocated += gb.unallocated;
+      const winners = [...new Set(scopesOut.flatMap(x => x.winners.map(w => w.player)))];
+      const unflighted = flights.length ? pr.rows.filter(r => r.complete && !flightOfRow(flights, r, tee)).map(r => r.label) : [];
+      return Object.assign({ pot, basis: pr.basis, ranked_by: pr.source, flights: flights.map(f => ({ id: f.id, name: f.name })), prizes: prizesOut, scopes: scopesOut,
+        standings: pr.rows.map(r => ({ player: r.label, complete: r.complete, total: r.total })).sort((a, b) => (a.total == null) - (b.total == null) || (pr.higher ? b.total - a.total : a.total - b.total)),
+        winners, paid: Math.round(spent * 100) / 100, given_back_each: gb.each, ...(ratio < 1 ? { scaled: true, asked: Math.round(asked * 100) / 100 } : {}), ...(unflighted.length ? { unflighted } : {}) },
+        capped ? { capped: true, configured_pot: configuredPot } : {});
+    }
+  };
   ADDONS.lowscore = {
     id: 'lowscore', order: 26, entity: 'individual',
     carve(state, addon, inputs) {
@@ -1159,8 +1182,6 @@
       const head = { pot, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: 'own', stroke_marks } : {}), ...(wantNet && !netOk ? { net_missing: true } : {}), period: plan.period };
       const tail = capped ? { capped: true, configured_pot: configuredPot } : {};
       const strip = r => ({ player: r.player, complete: r.complete, played: r.played, total: r.total, holes: r.holes });
-      const podium = lowscorePodiumOf(addon);
-      if (podium && plan.period === 'round') return lowscorePodium(state, addon, podium, rows, pot, head, tail, inputs);
       if (plan.period === 'round' || rows.length < 2) {
         const ranked = rows.filter(r => r.complete).sort((a, b) => a.total - b.total);
         ranked.forEach(r => { r.place = ranked.findIndex(x => x.total === r.total) + 1; r.tied = ranked.filter(x => x.total === r.total).length > 1; });
@@ -1630,8 +1651,7 @@
     config: [
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
       { key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' },
-      { key: 'period', type: 'enum', label: 'Scoring period', values: PERIOD_ORDER.slice(), default: 'round' },
-      { key: 'podium', type: 'podium', label: 'Prizes (flights and places)' }   // v1.62.0: optional. Without it the lowest total takes the pot; with it the pot is paid as the host's prize table (overall and/or flights, several places)
+      { key: 'period', type: 'enum', label: 'Scoring period', values: PERIOD_ORDER.slice(), default: 'round' }
     ],
     fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
     maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
@@ -1659,6 +1679,29 @@
     }]
   });
 
+  defineGame('podium', {
+    kind: 'addon', input: 'strokes', net: true, entity: 'individual', released: true,
+    meta: { traits: { unit: 'player', allowance: 'round', individualScores: true }, label: 'Prizes', icon: '🏆', seal: 'PRIZES', uiOrder: 50, group: 'prizes',
+      info: 'A prize pot paid in tiers of places. Overall and/or flights (players grouped by tee box), as many places as you like, each a dollar amount or a share of the prize pot. It ranks by the round totals or by one of the other games (a Scramble, BestBall...). Overall and each flight are paid separately, so one player can win both. A tie shares the places it covers.' },
+    config: [
+      { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
+      { key: 'rank_by', type: 'enum', label: 'Ranked by', values: ['auto', 'round'].concat(PRIZE_SOURCES), default: 'auto' },
+      { key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' },
+      { key: 'table', type: 'podium', label: 'Prizes (flights and places)', required: true }
+    ],
+    fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
+    maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
+    fixtures: [{
+      name: 'overall + two flights by tee box; ties share places; leftovers go back',
+      round: { dollar_per_player: 20, addons: [{ id: 'podium', entity: 'individual', dollar_per_player: 20, basis: 'gross', rank_by: 'round',
+        table: { flights: [{ id: 'green', name: 'Green', tees: ['Green'] }, { id: 'combo', name: 'Combo+', tees: ['Combo', 'Gold'] }],
+          prizes: [{ scope: 'overall', place: 1, amount: 50 }, { scope: 'green', place: 1, amount: 20 }, { scope: 'green', place: 2, pct: 5 }, { scope: 'combo', place: 1, amount: 30 }, { scope: 'combo', place: 2, amount: 10 }] } }] },
+      // A4=72 B5=90 C4=72 D=81 E=81 F5.5=99; pot 6x$20=$120. A and C tie for 1st overall: $50 shared over places 1+2 = $25 each. Green: A $20, B 5% = $6. Combo+: C $30; D and E tie for 2nd and share $10 = $5 each. Paid $116, the $4 left over is odd dollars (nobody gets less than a whole dollar).
+      inputs: { scorecards: [_P('A', _ALL(4)), _P('B', _ALL(5)), _P('C', _ALL(4)), _P('D', _H(...Array(9).fill(4), ...Array(9).fill(5))), _P('E', _H(...Array(9).fill(5), ...Array(9).fill(4))), _P('F', _ALL(5.5))],
+        teeByPlayer: new Map([['a', 'Green'], ['b', 'Green'], ['c', 'Combo'], ['d', 'Combo'], ['e', 'Gold'], ['f', 'Combo']]) },
+      expect: { payouts: { A: 45, B: 6, C: 55, D: 5, E: 5, F: 0 }, unallocated: 4, results: { podium: { pot: 120, paid: 116 } } }
+    }]
+  });
   defineGame('birdiepay', {
     kind: 'addon', input: 'strokes', net: true,
     meta: { traits: { unit: 'player', allowance: 'round', individualScores: true }, label: 'Birdie Payouts', uiOrder: 4, icon: '🐤', seal: 'BIRDIE PAY',
@@ -1797,7 +1840,7 @@
   }
   // Dev-93: the picker groups games — 'format' (how the round is scored: BestBall, later Foursomes / Match Play)
   // above 'side' (side bets that work on any scorecards: Skins, CTP, MiserBall, Birdie Payouts). Default is 'side'.
-  const GAME_GROUPS = [['format', 'Format'], ['side', 'Side games']];
+  const GAME_GROUPS = [['format', 'Format'], ['side', 'Side games'], ['prizes', 'Prizes']];
   function gameGroup(id) { return ADDONS[id] && ADDONS[id].meta && ADDONS[id].meta.group === 'format' ? 'format' : 'side'; }
   function groupRank(id) { return gameGroup(id) === 'format' ? 0 : 1; }
   function gamesUiMeta() {
@@ -2030,7 +2073,11 @@
     const lsc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.lowscore : null;
     if (games.includes('lowscore') && lsc) {
       addons.push({ id: 'lowscore', entity: 'individual', dollar_per_player: lsc.dollar_per_player, basis: lsc.basis === 'net' ? 'net' : 'gross',
-        ...(periodKey(lsc) !== 'round' ? { period: periodKey(lsc) } : {}), ...(lsc.podium && typeof lsc.podium === 'object' ? { podium: lsc.podium } : {}) });
+        ...(periodKey(lsc) !== 'round' ? { period: periodKey(lsc) } : {}) });
+    }
+    const pdc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.podium : null;
+    if (games.includes('podium') && pdc) {
+      addons.push({ id: 'podium', entity: 'individual', dollar_per_player: pdc.dollar_per_player, basis: pdc.basis === 'net' ? 'net' : 'gross', rank_by: pdc.rank_by || 'auto', table: pdc.table });
     }
     if (games.includes('skins')) {
       addons.push({ id: 'skins', entity: 'individual', basis: basisOf('skins_basis'), compare: 'low' });
@@ -2094,7 +2141,8 @@
     // Scramble teams, so Skins can score by team (a scramble's partners share one score; see the skins carve).
     const scrambleCfg = ((config && config.addons) || []).find(a => a && a.id === 'scramble');
     state.teamPairs = scrambleCfg && Array.isArray(scrambleCfg.pairs) ? scrambleCfg.pairs.filter(p => Array.isArray(p) && p.length) : [];
-    const results = { cttp: null, birdieball: null, birdiepay: null, turkeys: null, fourball: null, altshot: null, scramble: null, hilo: null, matchplay: null, lowscore: null, skins: null };
+    const results = { cttp: null, birdieball: null, birdiepay: null, turkeys: null, fourball: null, altshot: null, scramble: null, hilo: null, matchplay: null, lowscore: null, podium: null, skins: null };
+    state.results = results;   // a pot-level game (Prizes) reads the standings the games before it produced
     const addons = ((config && config.addons) || [])
       .filter(a => ADDONS[a.id])
       .slice()
@@ -2129,7 +2177,7 @@
       if (leftover > 0) { const gb = ledger.giveBack(leftover); state.unallocated += gb.unallocated; unspentEach = gb.each; }
     }
     const rows = [...ledger.rows.values()]
-      .map(r => Object.assign({}, r, { total: r.skins + r.cttp + r.birdieball + (r.birdiepay || 0) + (r.turkeys || 0) + (r.fourball || 0) + (r.altshot || 0) + (r.scramble || 0) + (r.hilo || 0) + (r.matchplay || 0) + (r.lowscore || 0) + r.given_back }))
+      .map(r => Object.assign({}, r, { total: r.skins + r.cttp + r.birdieball + (r.birdiepay || 0) + (r.turkeys || 0) + (r.fourball || 0) + (r.altshot || 0) + (r.scramble || 0) + (r.hilo || 0) + (r.matchplay || 0) + (r.lowscore || 0) + (r.podium || 0) + r.given_back }))
       .sort((a, b) => b.total - a.total || a.player.localeCompare(b.player));
     // A team paid as one row ("Ann & Bob") replaces its partners' own $0 rows; a partner who also won something on their own (a CttP) keeps theirs.
     const onTeamRow = new Set(); rows.forEach(r => (r.members || []).forEach(m => onTeamRow.add(m)));
@@ -2139,7 +2187,7 @@
       calc_version: 1,
       players_count: ledger.n, players, dollar_per_player: dpp, total_pot: totalPot,
       ...(carryIn > 0 ? { carried_in: carryIn } : {}), ...(carriedOut > 0 ? { carried_out: carriedOut } : {}),
-      ...(unspentEach > 0 && (results.fourball || results.altshot || results.scramble || results.hilo || results.matchplay || results.lowscore) ? { unspent_each: unspentEach } : {}),   // only for the games with pots; every older shape is unchanged
+      ...(unspentEach > 0 && (results.fourball || results.altshot || results.scramble || results.hilo || results.matchplay || results.lowscore || results.podium) ? { unspent_each: unspentEach } : {}),   // only for the games with pots; every older shape is unchanged
       games, cttp: results.cttp, birdieball: results.birdieball,
       // birdiepay only appears in a snapshot when the game was on, so every pre-Dev-89 payout keeps its exact shape
       ...(results.birdiepay ? { birdiepay: results.birdiepay } : {}),
@@ -2150,6 +2198,7 @@
       ...(results.hilo ? { hilo: results.hilo } : {}),
       ...(results.matchplay ? { matchplay: results.matchplay } : {}),
       ...(results.lowscore ? { lowscore: results.lowscore } : {}),
+      ...(results.podium ? { podium: results.podium } : {}),
       skins: results.skins, payouts: rows,
       // handicap summary only appears when a net game ran — gross snapshots keep their exact shape
       ...(netByPlayer.size ? { rankings: buildRankings(cards, netByPlayer) } : {}),

@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.63.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.64.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1201,11 +1201,50 @@ const GAME_SCHEMAS = {
           "sixes"
         ],
         "default": "round"
+      }
+    ]
+  },
+  "podium": {
+    "label": "Prizes",
+    "config": [
+      {
+        "key": "dollar_per_player",
+        "type": "money",
+        "label": "$ per player",
+        "default": 0,
+        "positive": true,
+        "required": true
       },
       {
-        "key": "podium",
+        "key": "rank_by",
+        "type": "enum",
+        "label": "Ranked by",
+        "values": [
+          "auto",
+          "round",
+          "scramble",
+          "fourball",
+          "altshot",
+          "hilo",
+          "lowscore"
+        ],
+        "default": "auto"
+      },
+      {
+        "key": "basis",
+        "type": "enum",
+        "label": "Gross or Net",
+        "values": [
+          "gross",
+          "net"
+        ],
+        "default": "gross"
+      },
+      {
+        "key": "table",
         "type": "podium",
-        "label": "Prizes (flights and places)"
+        "label": "Prizes (flights and places)",
+        "required": true
       }
     ]
   },

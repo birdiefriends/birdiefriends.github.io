@@ -82,7 +82,7 @@ for (let t = 0; t < 400; t++) {
   ok(Math.abs(paid + r.unallocated - r.total_pot) < 1e-9, 'fuzz ' + t + ': conservation (' + chosen.join(',') + ')');
 }
 // 7. UI helpers: stable host-facing order, unique uiOrder, text lives only in the definition
-ok(E.gamesInUiOrder().join() === 'fourball,altshot,scramble,hilo,matchplay,lowscore,skins,cttp,birdieball,birdiepay,turkeys', 'UI order: Format group first (BestBall, Low Score), then the side games in their old order');
+ok(E.gamesInUiOrder().join() === 'fourball,altshot,scramble,hilo,matchplay,lowscore,skins,cttp,birdieball,birdiepay,turkeys,podium', 'UI order: Format group first (BestBall, Low Score), then the side games in their old order, Prizes last');
 ok(new Set(addons.map(id => E.getGame(id).meta.uiOrder)).size === addons.length, 'uiOrder is unique per game');
 ok(E.gamesInUiOrder().includes('fourball') && E.gamesUiMeta().fourball && E.gamesInfo().fourball, 'released BestBall shows in the portal tables');
 ok((() => { const g = E.getGame('fourball'); g.released = false; const hidden = !E.gamesInUiOrder().includes('fourball') && !E.gamesUiMeta().fourball; g.released = true; return hidden; })(), 'the released flag still hides a game when off');
@@ -185,7 +185,7 @@ ok(/function gamesFormOverCommit[\s\S]{0,1400}BFEngine\.potFit\(/.test(psrc), 'p
 {
   const m = E.gamesUiMeta();
   ok(m.fourball.group === 'format' && ['skins','cttp','birdieball','birdiepay'].every(k => m[k].group === 'side'), 'groups: BestBall is a format, the rest are side games');
-  ok(E.GAME_GROUPS.map(g => g[1]).join() === 'Format,Side games', 'groups: headings Format / Side games');
+  ok(E.GAME_GROUPS.map(g => g[1]).join() === 'Format,Side games,Prizes', 'groups: headings Format / Side games / Prizes');
   const order = E.gamesInUiOrder(); const lastFormat = Math.max(...order.map((k, i) => m[k].group === 'format' ? i : -1)); const firstSide = order.findIndex(k => m[k].group === 'side');
   ok(lastFormat < firstSide, 'groups: every format sorts before every side game');
 }

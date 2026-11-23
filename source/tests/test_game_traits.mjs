@@ -19,7 +19,7 @@ all.forEach(id => {
 });
 ok(E.sideGames().join() === 'fourball,altshot,scramble,hilo,matchplay', 'sides games in UI order');
 ok(E.sideFormGames().join() === 'altshot,scramble,hilo,matchplay', 'side-form games');
-ok(E.gamesWith(t => t.allowance === 'round').join() === 'fourball,lowscore,birdiepay,skins' || E.gamesWith(t => t.allowance === 'round').length === 5, 'round-allowance games');
+ok(E.gamesWith(t => t.allowance === 'round').join() === 'fourball,lowscore,birdiepay,skins,podium' || E.gamesWith(t => t.allowance === 'round').length === 6, 'round-allowance games');
 ok(E.gameTraits('altshot').individualScores === false && E.gameTraits('matchplay').individualScores === false && E.gameTraits('fourball').individualScores === true, 'only one-ball / head-to-head games drop the individual ranking');
 ok(JSON.stringify(E.gameSides('matchplay', { matches: [['A', 'B'], ['C', 'D']] })) === '[["A"],["B"],["C"],["D"]]', 'match sides are single players in play order');
 ok(E.gameSides('altshot', { pairs: [['A', 'B'], ['C', 'D']] }).length === 2, 'pairs are the sides');
