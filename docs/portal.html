@@ -3709,7 +3709,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.66.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.66.2"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -11470,7 +11470,9 @@ function skEnsure(evt, config) {
 function skGroups() {
   const sides = (_sk ? liveSideSides(_sk.config) : []).map(sd => sd.filter(n => !skIsOut(n))).filter(sd => sd.length);   // players the host marked out are not offered
   const set = _sk && typeof _groupSets !== 'undefined' && _groupSets[_sk.gid] ? _groupSets[_sk.gid].published : null;
-  if (!set || !Array.isArray(set.groups) || !set.groups.length) return BFEngine.fourballGroups(sides);
+  // Nothing published: the host's open draft (same people per group) if the Groups screen holds one, else solos go three to a group.
+  const solo = sides.length > 0 && sides.every(sd => sd.length === 1) && !!_sk && liveOneBall(_sk.config);   // not Match Play: its solos pair off two a match
+  if (!set || !Array.isArray(set.groups) || !set.groups.length) return BFEngine.fourballGroups(sides, solo ? 3 : 2);
   const lc = x => String(x || '').trim().toLowerCase(), used = new Set(), out = [];
   set.groups.forEach((gr, i) => {
     const mem = new Set((gr.members || []).map(lc));
@@ -11479,7 +11481,7 @@ function skGroups() {
     if (gp.length) out.push({ n: i + 1, pairs: gp, players: gp.reduce((a, q) => a.concat(q), []), start_hole: gr.start_hole || null, wave: gr.wave || null, tee_time: gr.tee_time || null, mode: set.mode || null });
   });
   const rest = sides.filter((sd, si) => !used.has(si));
-  BFEngine.fourballGroups(rest).forEach(g => out.push({ ...g, n: out.length + 1 }));
+  BFEngine.fourballGroups(rest, rest.length && _sk && liveOneBall(_sk.config) && rest.every(sd => sd.length === 1) ? (Number(set.group_size) || 3) : 2).forEach(g => out.push({ ...g, n: out.length + 1 }));
   return out;
 }
 // Team names for the one-ball games (a scramble's teams are named), keyed by the team's first player.

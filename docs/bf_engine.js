@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.66.1';
+  const ENGINE_VERSION = '1.66.2';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2444,11 +2444,11 @@
   // ── Live scoring helpers (Dev-93) ───────────────────────────────────────
   // A foursome is two pairs head to head. The host's BestBall pairs are taken two at a time in the order
   // they were set: pairs 1+2 are group 1, pairs 3+4 are group 2, and so on. A last odd pair is its own group.
-  function fourballGroups(pairs) {
+  function fourballGroups(pairs, per) {
     const ps = (pairs || []).filter(p => Array.isArray(p) && (p.length === 2 || p.length === 1));
-    const out = [];
-    for (let i = 0; i < ps.length; i += 2) {
-      const gp = ps.slice(i, i + 2);
+    const out = [], step = Math.max(1, Number(per) || 2);   // sides per group: 2 for two-man teams; a field of solos is 3 (or the published size)
+    for (let i = 0; i < ps.length; i += step) {
+      const gp = ps.slice(i, i + step);
       out.push({ n: out.length + 1, pairs: gp, players: gp.reduce((a, p) => a.concat(p), []) });
     }
     return out;
