@@ -103,3 +103,8 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 
 ## v4.105.0 — custom tee boxes in Prizes flights
 - Flight tee picker now offers custom tees (any already in a flight or typed in Playing groups) plus an "Other…" button. Matching is case-insensitive on the tee name, so it must be spelled the same as in Playing groups.
+
+## v4.106.0 — Prizes pot derived from the places
+- Prize places are typed in dollars; the prize pot = sum of places, and `dollar_per_player` is computed (ceil to the cent over Yes count) by `pzSync()` (runs on every table edit and when the money step builds). No $/player retype. Money step Prizes row is a read-only total; Skins takes the remainder as before. Presets are dollar amounts (~40% of buy-in pot, rounded to $5).
+- Older tables with % places keep the typed $/player input (pzHasPct).
+- Tee flights, ranking and the engine are unchanged.

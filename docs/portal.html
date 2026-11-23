@@ -22304,7 +22304,11 @@ function gamesFormSplitBuild() {
     }
   });
   if (sel.has('lowscore')) { const c = _gamesFormLowscoreConfig; otherGames += (c.dollar_per_player || 0) * nYes; rows.push(periodRow('🎯', 'Individual Low Score', c, lowscoreSegCount(c), 'gw-split-ls', 'setGamesFormLowscoreDollarPerPlayer')); }
-  if (sel.has('podium')) { const c = _gamesFormPrizes; otherGames += (c.dollar_per_player || 0) * nYes; rows.push(card(`<div style="display:flex;align-items:center;gap:8px"><span style="flex:1;min-width:0"><span style="display:block;font-size:0.92rem;font-weight:700">🏆 Prizes</span><span style="display:block;${small};margin-top:1px">tiers of places${(c.table.flights || []).length ? ', ' + c.table.flights.length + ' flights' : ''}</span></span><span style="display:flex;align-items:center;gap:6px">${inp('gw-split-pz', c.dollar_per_player, 'setGamesFormPrizesDollarPerPlayer')}<span style="${small}">per player</span></span></div>`)); }
+  if (sel.has('podium')) { if (typeof pzSync === 'function') pzSync(); const c = _gamesFormPrizes; otherGames += (c.dollar_per_player || 0) * nYes;
+    if (!pzHasPct()) { const tot = pzTotal(), places = (c.table.prizes || []).filter(x => x.amount > 0).length;
+      rows.push(card(head('🏆', 'Prizes', bigTot('gs-pz-total', `${mny(otherGames)} <span style="${small};font-weight:400">${pctOf(otherGames)} of the pot</span>`))
+        + `<div style="${small};margin-top:5px;line-height:1.45">${tot > 0 ? `${places} place${places === 1 ? '' : 's'}${(c.table.flights || []).length ? ' across Overall and ' + c.table.flights.length + ' flight' + (c.table.flights.length === 1 ? '' : 's') : ''} add up to <b>${mny(tot)}</b> = ${mny(c.dollar_per_player)} × ${nYes} players. Change the amounts on the Prizes screen.` : 'Set an amount for each place on the Prizes screen.'}</div>`)); }
+    else rows.push(card(`<div style="display:flex;align-items:center;gap:8px"><span style="flex:1;min-width:0"><span style="display:block;font-size:0.92rem;font-weight:700">🏆 Prizes</span><span style="display:block;${small};margin-top:1px">tiers of places${(c.table.flights || []).length ? ', ' + c.table.flights.length + ' flights' : ''}</span></span><span style="display:flex;align-items:center;gap:6px">${inp('gw-split-pz', c.dollar_per_player, 'setGamesFormPrizesDollarPerPlayer')}<span style="${small}">per player</span></span></div>`)); }
   if (sel.has('cttp')) {
     const cc = _gamesFormCttpConfig, hN = (cc.holes || []).length, pz = (cc.prize_holes || []).length, dph = Number(cc.dollar_per_hole) || 0;
     ctpCost = dph * hN; takenFromPot += ctpCost;
@@ -22830,14 +22834,23 @@ function refreshGamesFormLowscoreSection() { const el = document.getElementById(
 // ── Prizes: tiers of places, Overall and/or flights, for ANY game (v4.103.0) ──────────────────────────────────────────────
 // _gamesFormPrizes = { dollar_per_player, rank_by: 'auto'|'round'|<game id>, basis, table: { flights: [{ id, name, tees[] }], prizes: [{ scope: 'overall' | flightId, place, amount | pct }] } }.
 // Players are in a flight by the tee box the host gave them in Playing groups. Overall and each flight are paid separately (one player can win both).
-function pzBlank() { return { dollar_per_player: null, rank_by: 'auto', basis: 'gross', table: { flights: [], prizes: [{ scope: 'overall', place: 1, pct: 100 }] } }; }
+function pzBlank() { return { dollar_per_player: null, rank_by: 'auto', basis: 'gross', table: { flights: [], prizes: [{ scope: 'overall', place: 1, amount: 0 }] } }; }
 function pzTable() { return _gamesFormPrizes.table; }
+// The prize pot is what the places add up to: $ per player is worked out from the table and the head count, never typed in.
+// (A table with a % place is the older shape: its pot is still typed.)
+function pzHasPct() { return pzTable().prizes.some(x => !(x.amount > 0) && x.pct > 0); }
+function pzTotal() { return pzTable().prizes.reduce((t, x) => t + (x.amount > 0 ? Number(x.amount) : 0), 0); }
+function pzSync() {
+  const c = _gamesFormPrizes; if (pzHasPct()) return;
+  const tot = pzTotal(), n = Math.max(1, _gamesFormYesCount || 0);
+  c.dollar_per_player = tot > 0 ? Math.ceil(tot / n * 100 - 1e-9) / 100 : null;
+}
 function pzPot() { return (Number(_gamesFormPrizes.dollar_per_player) || 0) * Math.max(0, _gamesFormYesCount || 0); }
 function pzPlan() {
   const pot = pzPot(), asked = pzTable().prizes.reduce((t, x) => t + (x.amount > 0 ? Number(x.amount) : (Number(x.pct) || 0) / 100 * pot), 0);
   return { pot, asked, left: pot - asked };
 }
-function pzRefresh() { const el = document.getElementById('games-form-podium-section'); if (el) el.innerHTML = gatheringGamesPodiumSectionHtml(); updateGamesFormPotPreview(); }
+function pzRefresh() { pzSync(); const el = document.getElementById('games-form-podium-section'); if (el) el.innerHTML = gatheringGamesPodiumSectionHtml(); updateGamesFormPotPreview(); }
 function setGamesFormPrizesDollarPerPlayer(val) {
   _gamesFormPrizes.dollar_per_player = Math.round((parseFloat(val) || 0) * 100) / 100; _gamesFormTouched.add('podium');
   const el = document.getElementById('pz-check'); if (el) el.innerHTML = pzCheckHtml(); updateGamesFormPotPreview();
@@ -22845,10 +22858,12 @@ function setGamesFormPrizesDollarPerPlayer(val) {
 function pzSetRankBy(v) { _gamesFormPrizes.rank_by = v; pzRefresh(); }
 function pzSetBasis(v) { _gamesFormPrizes.basis = v === 'net' ? 'net' : 'gross'; pzRefresh(); gamesFormAutoRanking(); refreshGamesFormHcpSection(); }
 function pzPreset(kind) {
+  const buy = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 20, sug = buy * Math.max(1, _gamesFormYesCount || 0) * 0.4;   // a starting point: about 40% of the buy-in pot, change any amount
+  const D = pct => Math.max(5, Math.round(sug * pct / 100 / 5) * 5);
   const t = pzTable(), fl = [{ id: 'f1', name: 'Flight 1', tees: [] }, { id: 'f2', name: 'Flight 2', tees: [] }];
-  if (kind === 'overall') { t.flights = []; t.prizes = [{ scope: 'overall', place: 1, pct: 60 }, { scope: 'overall', place: 2, pct: 25 }, { scope: 'overall', place: 3, pct: 15 }]; }
-  else if (kind === 'flights') { t.flights = fl; t.prizes = [{ scope: 'f1', place: 1, pct: 30 }, { scope: 'f1', place: 2, pct: 20 }, { scope: 'f2', place: 1, pct: 30 }, { scope: 'f2', place: 2, pct: 20 }]; }
-  else { t.flights = fl; t.prizes = [{ scope: 'overall', place: 1, pct: 40 }, { scope: 'f1', place: 1, pct: 20 }, { scope: 'f1', place: 2, pct: 10 }, { scope: 'f2', place: 1, pct: 20 }, { scope: 'f2', place: 2, pct: 10 }]; }
+  if (kind === 'overall') { t.flights = []; t.prizes = [{ scope: 'overall', place: 1, amount: D(60) }, { scope: 'overall', place: 2, amount: D(25) }, { scope: 'overall', place: 3, amount: D(15) }]; }
+  else if (kind === 'flights') { t.flights = fl; t.prizes = [{ scope: 'f1', place: 1, amount: D(30) }, { scope: 'f1', place: 2, amount: D(20) }, { scope: 'f2', place: 1, amount: D(30) }, { scope: 'f2', place: 2, amount: D(20) }]; }
+  else { t.flights = fl; t.prizes = [{ scope: 'overall', place: 1, amount: D(40) }, { scope: 'f1', place: 1, amount: D(20) }, { scope: 'f1', place: 2, amount: D(10) }, { scope: 'f2', place: 1, amount: D(20) }, { scope: 'f2', place: 2, amount: D(10) }]; }
   pzRefresh();
 }
 function pzFlightName(i, v) { const f = pzTable().flights[i]; if (f) f.name = String(v).slice(0, 24); }
@@ -22869,18 +22884,19 @@ function pzAddFlight() {
 function pzRemoveFlight(i) { const t = pzTable(), f = t.flights[i]; if (!f) return; t.flights.splice(i, 1); t.prizes = t.prizes.filter(x => x.scope !== f.id); pzRefresh(); }
 function pzAddPlace(scope) {
   const t = pzTable(), used = t.prizes.filter(x => x.scope === scope).map(x => x.place); let pl = 1; while (used.includes(pl)) pl++;
-  if (pl > 5) return; t.prizes.push({ scope, place: pl, pct: 0 }); pzRefresh();
+  if (pl > 5) return; t.prizes.push({ scope, place: pl, amount: 0 }); pzRefresh();
 }
 function pzRemovePlace(idx) { pzTable().prizes.splice(idx, 1); pzRefresh(); }
 function pzPrize(idx, field, v) {
   const x = pzTable().prizes[idx]; if (!x) return;
   if (field === 'unit') { const val = x.amount > 0 ? x.amount : x.pct || 0; delete x.amount; delete x.pct; x[v === 'pct' ? 'pct' : 'amount'] = val; pzRefresh(); return; }
   const n = Math.max(0, parseFloat(v) || 0); if (x.pct != null && !(x.amount > 0)) { x.pct = Math.min(100, n); delete x.amount; } else { x.amount = n; delete x.pct; }
-  const el = document.getElementById('pz-check'); if (el) el.innerHTML = pzCheckHtml();
+  pzSync(); const el = document.getElementById('pz-check'); if (el) el.innerHTML = pzCheckHtml(); updateGamesFormPotPreview();
 }
 function pzCheckHtml() {
   const pl = pzPlan(), m = v => '$' + (Math.round(v * 100) / 100).toFixed(Number.isInteger(Math.round(v * 100) / 100) ? 0 : 2);
-  if (!(pl.pot > 0)) return '<span style="color:var(--text-muted)">Enter $ per player above to see the prize pot.</span>';
+  if (!(pl.pot > 0)) return '<span style="color:var(--text-muted)">Enter an amount for each place. The prize pot is the places added up.</span>';
+  if (!pzHasPct()) return `Prize pot <b>${m(pzTotal())}</b> = ${m(_gamesFormPrizes.dollar_per_player)} × ${_gamesFormYesCount} players. It comes out of the buy-in; Skins gets what is left.${pl.left > 0.005 ? ` (${m(pl.left)} of rounding goes back to the players)` : ''}`;
   return pl.left < -0.005 ? `<span style="color:#b8860b">⚠️ Prizes add up to ${m(pl.asked)} but the prize pot is ${m(pl.pot)} (${_gamesFormYesCount} players). Every prize will be reduced to fit.</span>`
     : `Prizes ${m(pl.asked)} of the ${m(pl.pot)} prize pot${pl.left > 0.005 ? ` · ${m(pl.left)} left goes back to the players` : ' · all paid out'}.`;
 }
@@ -22896,8 +22912,8 @@ function gatheringGamesPodiumSectionHtml() {
   const prizeRows = scope => t.prizes.map((x, idx) => ({ x, idx })).filter(o => o.x.scope === scope).sort((a, b) => a.x.place - b.x.place).map(({ x, idx }) => {
     const isPct = !(x.amount > 0) && x.pct != null, val = isPct ? x.pct : (x.amount || '');
     return `<div style="display:flex;align-items:center;gap:6px;margin:4px 0"><span style="min-width:34px;font-weight:700;font-size:0.86rem">${ord(x.place)}</span>
-      <input type="number" inputmode="decimal" min="0" step="any" value="${val === 0 ? '' : val}" placeholder="0" oninput="pzPrize(${idx},'v',this.value)" style="width:84px;${inp}">
-      <select onchange="pzPrize(${idx},'unit',this.value)" style="${inp}"><option value="amount"${isPct ? '' : ' selected'}>$</option><option value="pct"${isPct ? ' selected' : ''}>% of prize pot</option></select>
+      ${isPct ? '' : '<span style="font-weight:700">$</span>'}<input type="number" inputmode="decimal" min="0" step="any" value="${val === 0 ? '' : val}" placeholder="0" oninput="pzPrize(${idx},'v',this.value)" style="width:84px;${inp}">
+      ${isPct ? `<select onchange="pzPrize(${idx},'unit',this.value)" style="${inp}"><option value="amount">$</option><option value="pct" selected>% of prize pot</option></select>` : ''}
       <button type="button" onclick="pzRemovePlace(${idx})" title="Remove" style="min-width:38px;min-height:38px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text-muted)">✕</button></div>`;
   }).join('');
   const scopeBox = (scope, title, extra) => `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px"><div style="font-weight:700;margin-bottom:4px">${title}</div>${extra || ''}${prizeRows(scope)}
@@ -22909,8 +22925,8 @@ function gatheringGamesPodiumSectionHtml() {
   const net = c.basis === 'net';
   return `<div class="host-form-field" id="games-form-podium-field">
       <label>🏆 Prizes</label>
-      <div class="gw-money"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:0.86rem">$</span>
-        <input type="number" id="games-form-pz-dpp" min="0.01" step="0.01" value="${c.dollar_per_player || ''}" style="width:90px" oninput="setGamesFormPrizesDollarPerPlayer(this.value)"><span style="font-size:0.86rem;color:var(--text-muted)">per player into the prize pot</span></div></div>
+      ${pzHasPct() ? `<div class="gw-money"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:0.86rem">$</span>
+        <input type="number" id="games-form-pz-dpp" min="0.01" step="0.01" value="${c.dollar_per_player || ''}" style="width:90px" oninput="setGamesFormPrizesDollarPerPlayer(this.value)"><span style="font-size:0.86rem;color:var(--text-muted)">per player into the prize pot</span></div></div>` : ''}
       <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 10px">Paid in tiers of places. This works with any game: it ranks the round totals, or the standings of another game you picked.</div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:0.86rem;font-weight:600;flex:1">Ranked by</span>
         <select onchange="pzSetRankBy(this.value)" style="${inp}">${srcs.map(([k, l]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></div>

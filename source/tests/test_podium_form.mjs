@@ -2,7 +2,7 @@
 import fs from 'fs'; import vm from 'vm'; import { extractFn, loadEngine } from './extract.mjs'; import { fileURLToPath } from 'url';
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
-const FN = ['pzResultsHtml', 'pzTeeChoices', 'pzFlightTeeOther', 'pzBlank', 'pzTable', 'pzPot', 'pzPlan', 'pzRefresh', 'pzSetRankBy', 'pzPreset', 'pzFlightName', 'pzFlightTee', 'pzAddFlight', 'pzRemoveFlight', 'pzAddPlace', 'pzRemovePlace', 'pzPrize', 'pzCheckHtml', 'pzSources', 'setGamesFormPrizesDollarPerPlayer', 'gatheringGamesPodiumSectionHtml'];
+const FN = ['pzResultsHtml', 'pzSync', 'pzHasPct', 'pzTotal', 'pzTeeChoices', 'pzFlightTeeOther', 'pzBlank', 'pzTable', 'pzPot', 'pzPlan', 'pzRefresh', 'pzSetRankBy', 'pzPreset', 'pzFlightName', 'pzFlightTee', 'pzAddFlight', 'pzRemoveFlight', 'pzAddPlace', 'pzRemovePlace', 'pzPrize', 'pzCheckHtml', 'pzSources', 'setGamesFormPrizesDollarPerPlayer', 'gatheringGamesPodiumSectionHtml'];
 const els = {}; let refreshes = 0;
 const ctx = { Math, Number, String, Array, Object, JSON, parseFloat, escapeHtml: s => String(s), document: { getElementById: id => els[id] || null }, updateGamesFormPotPreview() { refreshes++; }, gamesFormAutoRanking() {}, refreshGamesFormHcpSection() {} };
 vm.createContext(ctx);
@@ -15,9 +15,9 @@ R("pzFlightName(0, 'Green')"); R("pzFlightTee(0, 'Green')"); R("pzFlightName(1, 
 ok(R('pzTable().flights[0].tees.join()') === 'Green' && R('pzTable().flights[1].tees.join()') === 'Gold,White', 'tee boxes pick a flight');
 R("pzFlightTee(1, 'White')"); ok(R('pzTable().flights[1].tees.join()') === 'Gold', 'tapping a tee again removes it');
 R("pzAddPlace('overall')"); ok(R("pzTable().prizes.filter(x => x.scope === 'overall').map(x => x.place).sort().join()") === '1,2', 'Add a place gives the next place');
-R("pzPrize(0, 'v', '25')"); ok(R('pzTable().prizes[0].pct') === 25, 'typing in a percent row sets the percent');
-R("pzPrize(0, 'unit', 'amount')"); R("pzPrize(0, 'v', '150')"); ok(R('pzTable().prizes[0].amount') === 150 && R('pzTable().prizes[0].pct') === undefined, 'switching a prize to dollars keeps one unit');
-els['pz-check'] = { innerHTML: '' }; R("pzPrize(0, 'v', '999')"); ok(/reduced to fit/.test(els['pz-check'].innerHTML), 'a table bigger than the pot warns as you type');
+R("pzPrize(0, 'v', '25')"); ok(R('pzTable().prizes[0].amount') === 25 && R('pzTable().prizes[0].pct') === undefined, 'typing in a prize row sets dollars');
+R("pzPrize(0, 'unit', 'pct')"); R("pzPrize(0, 'v', '25')"); ok(R('pzTable().prizes[0].pct') === 25 && R('pzHasPct()') === true, 'an older % row still works and is flagged'); R("pzPrize(0, 'unit', 'amount')"); R("pzPrize(0, 'v', '150')"); ok(R('pzTable().prizes[0].amount') === 150 && R('pzTable().prizes[0].pct') === undefined, 'switching a prize to dollars keeps one unit');
+els['pz-check'] = { innerHTML: '' }; R("pzPrize(0, 'v', '999')"); ok(R('_gamesFormPrizes.dollar_per_player * _gamesFormYesCount') >= R('pzTotal()') && R('pzTotal()') > 999 - 1 && /Prize pot/.test(els['pz-check'].innerHTML), 'the prize pot (and $ per player) follows the places added up: no re-typing, no over-asking');
 R("pzRemoveFlight(0)"); ok(R("pzTable().flights.length") === 1 && !R("pzTable().prizes.some(x => x.scope === 'f1')"), 'removing a flight removes its prizes');
 ok(R("pzSources().map(x => x[0]).join()") === 'auto,round,scramble', 'it can rank the round totals or any game picked on the event');
 R("_gamesFormSelected.add('fourball')"); ok(/fourball/.test(R("pzSources().map(x => x[0]).join()")), 'picking BestBall adds it as something to rank');
