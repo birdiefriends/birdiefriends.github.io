@@ -2,7 +2,7 @@
 import fs from 'fs'; import vm from 'vm'; import { extractFn, loadEngine } from './extract.mjs'; import { fileURLToPath } from 'url';
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
-const FN = ['pzResultsHtml', 'pzTiebreak', 'pzSync', 'pzHasPct', 'pzTotal', 'pzTeeChoices', 'pzFlightTeeOther', 'pzBlank', 'pzTable', 'pzPot', 'pzPlan', 'pzRefresh', 'pzSetRankBy', 'pzPreset', 'pzFlightName', 'pzFlightTee', 'pzAddFlight', 'pzRemoveFlight', 'pzAddPlace', 'pzRemovePlace', 'pzPrize', 'pzCheckHtml', 'pzSources', 'setGamesFormPrizesDollarPerPlayer', 'gatheringGamesPodiumSectionHtml'];
+const FN = ['pzResultsHtml', 'pzTiebreak', 'pzSync', 'pzHasPct', 'pzTotal', 'pzTeeChoices', 'pzFlightTeeOther', 'pzBlank', 'pzTable', 'pzPot', 'pzCostFor', 'pzPlan', 'pzRefresh', 'pzSetRankBy', 'pzPreset', 'pzFlightName', 'pzFlightTee', 'pzAddFlight', 'pzRemoveFlight', 'pzAddPlace', 'pzRemovePlace', 'pzPrize', 'pzCheckHtml', 'pzSources', 'setGamesFormPrizesDollarPerPlayer', 'gatheringGamesPodiumSectionHtml'];
 const els = {}; let refreshes = 0;
 const ctx = { Math, Number, String, Array, Object, JSON, parseFloat, escapeHtml: s => String(s), document: { getElementById: id => els[id] || null }, updateGamesFormPotPreview() { refreshes++; }, gamesFormAutoRanking() {}, refreshGamesFormHcpSection() {} };
 vm.createContext(ctx);
@@ -46,4 +46,10 @@ R("pzTiebreak('Putt-off on the green')"); ok(R('_gamesFormPrizes.tiebreak') === 
 ok(/tiebreak: \[String\(c\.tiebreak\)/.test(src) && /tie_order: c\.tie_order/.test(src), 'it is saved with the Prizes config, and a recorded result survives an edit of Games');
 ok(!/No money, the loser buys/.test(src) && /No money, bragging rights/.test(src) && /Ranks the Prizes below, which pay the places/.test(src), 'the player games card: no "loser buys" (that is the BF Cup), and a Scramble feeding Prizes says so');
 ok(!/prizes \| \| \[\]\)\.length\} prizes · \$\$\{\(pzA\.dollar_per_player/.test(src) && /prizes · \$\{usd\(cost\)\} prize pot/.test(src), 'the Prizes line shows the prize pot, not $/player');
+// the dollar prizes are a fixed total: 22 players, $150 posted -> the pot is exactly $150, not 22 x a rounded $6.82 ($150.04)
+{ const c = vm.runInContext('_gamesFormPrizes', ctx); c.table = { flights: [], prizes: [{ scope: 'overall', place: 1, amount: 100 }, { scope: 'overall', place: 2, amount: 50 }] };
+  vm.runInContext('_gamesFormYesCount = 22', ctx); vm.runInContext('pzSync()', ctx);
+  ok(vm.runInContext('pzCostFor(22)', ctx) === 150 && vm.runInContext('pzPot()', ctx) === 150, 'fixed dollar prizes: the pot is exactly the posted $150 (got ' + vm.runInContext('pzPot()', ctx) + ')');
+  c.table.prizes[1] = { scope: 'overall', place: 2, pct: 50 }; c.dollar_per_player = 10;
+  ok(vm.runInContext('pzCostFor(22)', ctx) === 220, 'percent prizes still follow the head count ($10 x 22)'); }
 console.log(`${pass} passed, ${fail} failed`); if (fail) process.exit(1);
