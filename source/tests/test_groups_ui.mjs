@@ -3,7 +3,7 @@ import fs from 'fs'; import vm from 'vm'; import { JSDOM } from 'jsdom'; import 
 const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const E = loadEngine();
-const FN = ['groupsRefresh', 'groupsTeeOf', 'groupsSetTeeDefault', 'groupsSetTeeFor', 'groupsTeeOther', 'groupsRowsFromApi', 'groupsUnitsFor', 'groupsStripUnits', 'openGatheringGroups', 'groupsOptsForEngine', 'groupsStartManual', 'groupsSetOptSpacing', 'groupsToggleSetup', 'groupsPlace', 'groupsItems', 'groupsItemAt', 'groupsWarnings', 'groupsWarnHtml', 'groupsSuggest', 'groupsSetOpt', 'groupsSetOptTyped', 'groupsSetField', 'groupsRefreshStatus', 'groupsItems', 'groupsItemAt', 'groupsPlace', 'groupsDropAt', 'groupsScroller', 'groupsPtrDown', 'groupsPtrMove', 'groupsPtrUp', 'groupsMenu', 'groupsAddGroupWith', 'groupsToggleSetup', 'groupsToPool', 'groupsDragStart', 'groupsDrop', 'groupsItemMove', 'groupsGroupMove', 'groupsSetOptPlace', 'groupsSetStatus', 'groupsAddGroup', 'groupsRemoveGroup', 'groupsRender', 'groupsSetOptMode', 'groupsSetOptSize', 'groupsSetOptSpread', 'groupsSave', 'groupsPublish', 'groupsLoadPublished', 'myGroupBannerHtml', 'openGatheringGroupsSheet', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamsState', 'teamsStateFromPicks', 'hostSetTeamsFor'];
+const FN = ['groupsRefresh', 'groupsReset', 'groupsTeeOf', 'groupsSetTeeDefault', 'groupsSetTeeFor', 'groupsTeeOther', 'groupsRowsFromApi', 'groupsUnitsFor', 'groupsStripUnits', 'openGatheringGroups', 'groupsOptsForEngine', 'groupsStartManual', 'groupsSetOptSpacing', 'groupsToggleSetup', 'groupsPlace', 'groupsItems', 'groupsItemAt', 'groupsWarnings', 'groupsWarnHtml', 'groupsSuggest', 'groupsSetOpt', 'groupsSetOptTyped', 'groupsSetField', 'groupsRefreshStatus', 'groupsItems', 'groupsItemAt', 'groupsPlace', 'groupsDropAt', 'groupsScroller', 'groupsPtrDown', 'groupsPtrMove', 'groupsPtrUp', 'groupsMenu', 'groupsAddGroupWith', 'groupsToggleSetup', 'groupsToPool', 'groupsDragStart', 'groupsDrop', 'groupsItemMove', 'groupsGroupMove', 'groupsSetOptPlace', 'groupsSetStatus', 'groupsAddGroup', 'groupsRemoveGroup', 'groupsRender', 'groupsSetOptMode', 'groupsSetOptSize', 'groupsSetOptSpread', 'groupsSave', 'groupsPublish', 'groupsLoadPublished', 'myGroupBannerHtml', 'openGatheringGroupsSheet', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamsState', 'teamsStateFromPicks', 'hostSetTeamsFor'];
 const dom = new JSDOM('<body><div id="host-sheet-body"></div><button id="host-sheet-back"></button></body>');
 const reqs = []; let regs, groupSet = null;
 const players = Array.from({ length: 24 }, (_, i) => 'P' + (i + 1)).concat(['Rich']);
@@ -18,6 +18,7 @@ const ctx = { setInterval, clearInterval, window: dom.window, document: dom.wind
     if (/\/registrations$/.test(u)) return { registrations: regs };
     if (/group-sets\/gathering\/104(\?|$)/.test(u) && !(o && o.method)) return groupSet || { published: null, version: 0 };
     if (/\/publish$/.test(u)) return { ok: true, version: 1, notified: 25 };
+    if (/\/reset$/.test(u)) return { ok: true, version: 4, cleared: true };
     return { ok: true };
   } };
 vm.createContext(ctx);
@@ -208,4 +209,25 @@ ok(!vm.runInContext('groupsWarnings()', ctx).some(w => w.code === 'short' && w.g
   ok(!vm.runInContext('_grp.set.groups.flatMap(g=>g.members)', ctx).includes(gone) && vm.runInContext('_grp.set.groups.flatMap(g=>g.members).length', ctx) === before - 1 && vm.runInContext('_grp.dirty', ctx), 'Refresh from registration takes a dropped player out of their group');
   ok(/Refresh from registration/.test(body().innerHTML) && /Removed \(no longer registered\)/.test(body().textContent), 'the button is on the screen and says who was removed');
   regs = keep; }
+
+// ── Reset (v4.111.0): the event moved, so the host clears the draft and the published groups from the Groups screen
+{ regs = players.map(p => ({ player_id: p, status: 'yes', partner_id: null }));
+  groupSet = { published: { v: 1, mode: 'shotgun', holes: 18, group_size: 4, status: 'final', groups: [{ members: ['P1', 'P2', 'P3', 'P4'], start_hole: 1 }, { members: ['P5', 'P6', 'P7', 'P8'], start_hole: 3 }] }, version: 3, published_at: '2026-11-25T12:00:00Z' };
+  await vm.runInContext('openGatheringGroups(104)', ctx);
+  ok(!!doc.getElementById('grp-reset') && /Reset groups & clear published/.test(doc.getElementById('grp-reset').textContent), 'published groups: the Reset button says it clears the published groups too');
+  vm.runInContext('_groupSets[104] = { published: { groups: [] }, version: 3 }', ctx);
+  reqs.length = 0; ctx.toasts.length = 0;
+  await vm.runInContext('groupsReset()', ctx);
+  ok(reqs.length === 1 && /\/group-sets\/gathering\/104\/reset$/.test(reqs[0][0]) && reqs[0][1].host_id === vm.runInContext('currentPlayer', ctx), 'reset posts to /reset as the host: ' + JSON.stringify(reqs));
+  ok(vm.runInContext('_grp.set === null && _grp.publishedAt === null && _grp.version === 4 && !_grp.dirty', ctx), 'the screen state is cleared and the version follows the server');
+  ok(vm.runInContext('_groupSets[104] === undefined', ctx), 'the cached published set is dropped so the event card stops showing a start line');
+  ok(/not published yet/.test(body().textContent) && /No playing groups yet/.test(body().textContent), 'the screen goes back to Build playing groups');
+  ok(!doc.getElementById('grp-reset'), 'with nothing left, there is no Reset button');
+  ok(ctx.toasts.some(t => /unpublished/.test(t[0]) && !t[1]), 'the host is told: ' + JSON.stringify(ctx.toasts));
+  // a declined confirm changes nothing
+  groupSet = { published: { v: 1, mode: 'shotgun', holes: 18, group_size: 4, groups: [{ members: ['P1', 'P2'], start_hole: 1 }] }, version: 5, published_at: '2026-11-25T12:00:00Z' };
+  await vm.runInContext('openGatheringGroups(104)', ctx); reqs.length = 0;
+  vm.runInContext('confirm = () => false', ctx); await vm.runInContext('groupsReset()', ctx);
+  ok(reqs.length === 0 && vm.runInContext('_grp.publishedAt !== null', ctx), 'Cancel on the confirm leaves everything alone');
+  vm.runInContext('confirm = () => true', ctx); groupSet = null; }
 console.log(`${pass} passed, ${fail} failed`); if (fail) process.exit(1);

@@ -3026,11 +3026,12 @@ export default {
     //   GET  /group-sets/:type/:id?round=&host_id=|pin=   host/commissioner: { draft, published, status }; anyone else: published only
     //   POST /group-sets/:type/:id        { host_id|pin, round?, draft }        save the draft (POST: this Worker's CORS list has no PUT)
     //   POST /group-sets/:type/:id/publish { host_id|pin, round?, notify? }     publish the draft, optionally push each player their start
+    //   POST /group-sets/:type/:id/reset   { host_id|pin, round? }              clear the draft AND the published groups (event moved / start over); no push is sent
     // The table is created on first use, so there is no manual migration.
-    const gsMatch = url.pathname.match(/^\/group-sets\/([a-z_]+)\/([^\/]+?)(\/publish)?$/);
+    const gsMatch = url.pathname.match(/^\/group-sets\/([a-z_]+)\/([^\/]+?)(\/publish|\/reset)?$/);
     if (gsMatch) {
       const json = (obj, status) => new Response(JSON.stringify(obj), { status: status || 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      const gsType = gsMatch[1], gsId = decodeURIComponent(gsMatch[2]), isPublish = !!gsMatch[3];
+      const gsType = gsMatch[1], gsId = decodeURIComponent(gsMatch[2]), isPublish = gsMatch[3] === '/publish', isReset = gsMatch[3] === '/reset';
       try {
         await env.DB.prepare(`CREATE TABLE IF NOT EXISTS event_group_sets (
           scope_type TEXT NOT NULL, scope_id TEXT NOT NULL, round_key TEXT NOT NULL DEFAULT '',
@@ -3055,6 +3056,14 @@ export default {
           return json(out);
         }
         if (!isManager) return json({ error: 'Only the host can change the groups' }, 403);
+        if (request.method === 'POST' && isReset) {
+          // Reset (v4.111.0): the host starts over, e.g. the event moved to another day. Clears BOTH the draft and the published groups.
+          // The row is kept with version + 1 (not deleted) so a stale editor still gets the 'stale' 409 and phones polling the version notice the change.
+          // Nobody is pushed: players simply stop seeing a group line until new groups are published.
+          if (!row) return json({ ok: true, version: 0, cleared: false });
+          await env.DB.prepare(`UPDATE event_group_sets SET draft = NULL, published = NULL, published_at = NULL, version = version + 1, updated_by = ?, updated_at = datetime('now') WHERE scope_type = ? AND scope_id = ? AND round_key = ?`).bind(actor || 'commissioner', gsType, gsId, round).run();
+          return json({ ok: true, version: row.version + 1, cleared: true });
+        }
         if (request.method === 'POST' && !isPublish) {
           const d = body.draft;
           if (!d || typeof d !== 'object' || !Array.isArray(d.groups)) return json({ error: 'draft with a groups array is required' }, 400);

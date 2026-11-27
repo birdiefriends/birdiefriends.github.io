@@ -6578,6 +6578,7 @@ function groupsRender() {
     <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px">${GRP_ESC(_grp.g.name)}${_grp.publishedAt ? ` · published (v${_grp.version})` : ' · not published yet'}<br>Teams stay together. This sets who tees off together.</div>
     ${_grp.notes.length ? `<div style="font-size:0.78rem;color:#8a6d00;margin-bottom:8px">${_grp.notes.map(GRP_ESC).join('<br>')}</div>` : ''}
     <button type="button" class="btn btn-secondary" style="width:100%;min-height:44px;margin-bottom:10px" onclick="groupsRefresh()">🔄 Refresh from registration</button>
+    ${(s || _grp.publishedAt) ? `<button type="button" id="grp-reset" class="btn btn-ghost btn-sm" style="width:100%;min-height:44px;margin-bottom:10px;color:#a32d2d;border:1px solid rgba(163,45,45,0.35);border-radius:10px" onclick="groupsReset()">↺ Reset groups${_grp.publishedAt ? ' &amp; clear published' : ''}</button>` : ''}
     ${settings}${panels}
     <div id="grp-warn" style="margin:6px 0 10px">${groupsWarnHtml()}</div>
     ${s ? `<div style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--border);margin:0 -2px;padding:8px 2px calc(8px + env(safe-area-inset-bottom,0px));z-index:5">
@@ -6607,6 +6608,24 @@ async function groupsSave(quiet) {
     _grp.dirty = false; groupsRefreshStatus(); if (!quiet) showToast('Draft saved');
     return true;
   } catch (e) { showToast('Could not save: ' + (e.message || e), true); return false; }
+}
+// Reset (v4.111.0): start the groups over, e.g. the event moved to another day. Clears the saved draft AND the published groups on the Worker, so players
+// stop seeing a start line until new groups are published. The roster itself (who is registered, teams) is untouched, and no push is sent.
+async function groupsReset() {
+  if (!_grp) return;
+  const pub = !!_grp.publishedAt;
+  if (!confirm(`Reset the playing groups for ${_grp.g.name}?\n\nThis clears your draft${pub ? ' and the published groups players can see now' : ''}. Registration and teams stay as they are, and nobody is notified.`)) return;
+  const btn = document.getElementById('grp-reset'); if (btn) btn.disabled = true;
+  try {
+    const r = await gatheringsFetchJSON(`${GATHERINGS_API}/group-sets/gathering/${_grp.gid}/reset`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host_id: currentPlayer }) }, 12000);
+    if (!r || !r.ok) throw new Error((r && r.error) || 'the server did not accept it');
+    delete _groupSets[_grp.gid];
+    _grp.set = null; _grp.sel = null; _grp.dirty = false; _grp.notes = []; _grp.publishedAt = null; _grp.version = r.version != null ? r.version : _grp.version; _grp.status = 'preliminary'; _grp.setupOpen = true;
+    _grp.tee_default = ''; _grp.tees = {};
+    showToast(pub ? 'Groups reset and unpublished' : 'Groups reset');
+    groupsRender();
+    if (typeof renderAll === 'function') renderAll();
+  } catch (e) { showToast('Could not reset: ' + (e.message || e), true); if (btn) btn.disabled = false; }
 }
 async function groupsPublish() {
   if (!_grp || !_grp.set) return;
@@ -6859,6 +6878,7 @@ async function refreshGroupSetNow(gid) {
   try {
     const r = await gatheringsFetchJSON(`${GATHERINGS_API}/group-sets/gathering/${gid}`, {}, 8000);
     if (r && r.published) { _groupSets[gid] = { published: r.published, version: r.version }; return true; }
+    if (r && r.published === null && _groupSets[gid]) { delete _groupSets[gid]; return true; }   // the host reset the groups (v4.111.0)
   } catch (e) { /* retried on the next tick */ }
   return false;
 }
@@ -6866,7 +6886,7 @@ async function liveGroupSetCheck(evt) {
   try { liveEditRetryPending(); } catch (e) { /* retried on the next tick */ }
   const gid = evt && evt.gatheringId; if (gid == null || !_groupSets[gid]) return;
   const before = _groupSets[gid].version;
-  if (await refreshGroupSetNow(gid) && _groupSets[gid].version !== before) { if (typeof renderAll === 'function') renderAll(); if (typeof renderLiveBanner === 'function') renderLiveBanner(); }
+  if (await refreshGroupSetNow(gid) && (_groupSets[gid] ? _groupSets[gid].version : null) !== before) { if (typeof renderAll === 'function') renderAll(); if (typeof renderLiveBanner === 'function') renderLiveBanner(); }
 }
 // The player's own card: where they start. Only gatherings starting within a week are looked up, and only the published set is ever read.
 async function groupsLoadPublished() {

@@ -46,4 +46,26 @@ pushes.length = 0; const d3 = JSON.parse(JSON.stringify(d2)); d3.status = 'final
 await call('POST', '/group-sets/gathering/104', { host_id: 'Brian Hager', draft: d3 });
 r = await call('POST', '/group-sets/gathering/104/publish', { host_id: 'Brian Hager' });
 ok(r.json.notified > 2 && pushes.every(p => /^FINAL: you are in Group/.test(p.contents.en)), 'marking it Final tells every player, as FINAL: ' + JSON.stringify(r.json));
+
+// Reset (v4.111.0): the host starts over (event moved). Draft AND published are cleared, version still moves, nobody is pushed.
+pushes.length = 0;
+r = await call('POST', '/group-sets/gathering/104/reset', { host_id: 'Someone Else' });
+ok(r.status === 403, 'only the host can reset: ' + r.status);
+const vBefore = (await call('GET', '/group-sets/gathering/104')).json.version;
+r = await call('POST', '/group-sets/gathering/104/reset', { host_id: 'Brian Hager' });
+ok(r.status === 200 && r.json.ok && r.json.cleared && r.json.version === vBefore + 1, 'host reset: version moves on: ' + JSON.stringify(r.json));
+ok(pushes.length === 0, 'a reset sends no push');
+r = await call('GET', '/group-sets/gathering/104');
+ok(r.json.published === null && r.json.published_at === null && r.json.version === vBefore + 1, 'players see no published groups after a reset: ' + JSON.stringify(r.json));
+r = await call('GET', '/group-sets/gathering/104?host_id=Brian%20Hager');
+ok(r.json.draft === null, 'the host draft is gone too');
+r = await call('POST', '/group-sets/gathering/104/publish', { host_id: 'Brian Hager' });
+ok(r.status === 400, 'publishing with nothing left is refused until new groups are saved: ' + r.status);
+r = await call('POST', '/group-sets/gathering/104/publish', { host_id: 'Brian Hager', draft, if_version: vBefore });
+ok(r.status === 409 && r.json.code === 'stale', 'a stale editor that started before the reset is refused: ' + r.status);
+r = await call('POST', '/group-sets/gathering/104', { host_id: 'Brian Hager', draft });
+r = await call('POST', '/group-sets/gathering/104/publish', { host_id: 'Brian Hager', notify: false });
+ok(r.status === 200 && r.json.version === vBefore + 2, 'new groups publish normally after a reset: ' + JSON.stringify(r.json));
+r = await call('POST', '/group-sets/gathering/777/reset', { pin: '7797' });
+ok(r.status === 200 && r.json.ok && r.json.cleared === false, 'resetting an event with no groups is a harmless no-op: ' + JSON.stringify(r.json));
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
